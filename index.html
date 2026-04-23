@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meri's Content Studio</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Mono:wght@300;400;500&family=Cormorant+Garamond:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #18181f;
+    --border: #2a2a38;
+    --accent1: #c8a96e; /* gold */
+    --accent2: #7c6fff; /* violet */
+    --accent3: #ff6b9d; /* pink */
+    --text: #e8e4dc;
+    --muted: #6b6880;
+    --personal: #ff6b9d;
+    --studio: #c8a96e;
+    --ai: #7c6fff;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.4;
+  }
+
+  header {
+    padding: 2rem 2.5rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: rgba(10,10,15,0.92);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--accent1), var(--accent3));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .logo span {
+    font-style: italic;
+    font-weight: 400;
+  }
+
+  .week-nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .week-nav button {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .week-nav button:hover { border-color: var(--accent1); color: var(--accent1); }
+
+  .week-label {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1rem;
+    color: var(--text);
+    min-width: 180px;
+    text-align: center;
+  }
+
+  /* Account tabs */
+  .account-tabs {
+    display: flex;
+    gap: 0.5rem;
+    padding: 1.2rem 2.5rem;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+
+  .tab {
+    padding: 0.45rem 1rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition: all 0.2s;
+    background: transparent;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .tab.personal { --color: var(--personal); }
+  .tab.studio { --color: var(--studio); }
+  .tab.ai { --color: var(--ai); }
+
+  .tab:hover, .tab.active {
+    background: color-mix(in srgb, var(--color) 12%, transparent);
+    border-color: var(--color);
+    color: var(--color);
+  }
+
+  .tab.all.active { background: var(--surface2); border-color: var(--text); color: var(--text); }
+
+  /* Main layout */
+  .main { display: flex; height: calc(100vh - 130px); }
+
+  /* Calendar */
+  .calendar-pane {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem 2.5rem;
+    border-right: 1px solid var(--border);
+  }
+
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+
+  .day-header {
+    text-align: center;
+    font-size: 0.62rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0.5rem 0;
+  }
+
+  .day-cell {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    min-height: 110px;
+    padding: 0.6rem;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    position: relative;
+  }
+
+  .day-cell:hover { border-color: var(--accent2); }
+  .day-cell.selected { border-color: var(--accent2); background: color-mix(in srgb, var(--accent2) 6%, var(--surface)); }
+  .day-cell.today .day-num { color: var(--accent1); }
+
+  .day-cell.other-month { opacity: 0.35; }
+
+  .day-num {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+  }
+
+  .post-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.58rem;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.2rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .post-chip:hover { opacity: 0.8; }
+
+  .post-chip.personal { background: color-mix(in srgb, var(--personal) 15%, transparent); color: var(--personal); border: 1px solid color-mix(in srgb, var(--personal) 30%, transparent); }
+  .post-chip.studio { background: color-mix(in srgb, var(--studio) 15%, transparent); color: var(--studio); border: 1px solid color-mix(in srgb, var(--studio) 30%, transparent); }
+  .post-chip.ai { background: color-mix(in srgb, var(--ai) 15%, transparent); color: var(--ai); border: 1px solid color-mix(in srgb, var(--ai) 30%, transparent); }
+
+  .chip-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .personal .chip-dot { background: var(--personal); }
+  .studio .chip-dot { background: var(--studio); }
+  .ai .chip-dot { background: var(--ai); }
+
+  .chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .add-post-btn {
+    position: absolute;
+    bottom: 5px; right: 6px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+    line-height: 1;
+  }
+
+  .day-cell:hover .add-post-btn { opacity: 1; }
+  .add-post-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* Right panel */
+  .panel {
+    width: 380px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .panel-header {
+    padding: 1.2rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* Generator */
+  .generator {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .gen-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .account-select-row {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+
+  .acc-btn {
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.62rem;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    transition: all 0.2s;
+  }
+
+  .acc-btn.personal.sel { background: color-mix(in srgb, var(--personal) 15%, transparent); border-color: var(--personal); color: var(--personal); }
+  .acc-btn.studio.sel { background: color-mix(in srgb, var(--studio) 15%, transparent); border-color: var(--studio); color: var(--studio); }
+  .acc-btn.ai-eng.sel { background: color-mix(in srgb, var(--ai) 15%, transparent); border-color: var(--ai); color: var(--ai); }
+
+  .platform-row {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+
+  .plat-btn {
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.58rem;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    transition: all 0.2s;
+  }
+
+  .plat-btn.sel { background: var(--surface2); border-color: var(--text); color: var(--text); }
+
+  .prompt-area {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.75rem;
+    padding: 0.8rem;
+    border-radius: 6px;
+    resize: none;
+    min-height: 80px;
+    margin-bottom: 0.8rem;
+    transition: border-color 0.2s;
+    line-height: 1.6;
+  }
+
+  .prompt-area:focus { outline: none; border-color: var(--accent2); }
+  .prompt-area::placeholder { color: var(--muted); }
+
+  .lang-row {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+  }
+
+  .lang-btn {
+    flex: 1;
+    padding: 0.35rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.62rem;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    transition: all 0.2s;
+  }
+
+  .lang-btn.sel { background: var(--surface2); border-color: var(--accent1); color: var(--accent1); }
+
+  .gen-btn {
+    width: 100%;
+    padding: 0.7rem;
+    background: linear-gradient(135deg, var(--accent2), var(--accent3));
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+
+  .gen-btn:hover { opacity: 0.88; }
+  .gen-btn:active { transform: scale(0.98); }
+  .gen-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Output */
+  .output-area {
+    flex: 1;
+    padding: 1.5rem;
+    overflow-y: auto;
+  }
+
+  .output-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+    animation: fadeSlide 0.3s ease;
+  }
+
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .output-block-header {
+    padding: 0.6rem 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .output-platform-tag {
+    font-size: 0.58rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+  }
+
+  .output-platform-tag.personal { background: color-mix(in srgb, var(--personal) 15%, transparent); color: var(--personal); }
+  .output-platform-tag.studio { background: color-mix(in srgb, var(--studio) 15%, transparent); color: var(--studio); }
+  .output-platform-tag.ai { background: color-mix(in srgb, var(--ai) 15%, transparent); color: var(--ai); }
+
+  .output-actions { display: flex; gap: 0.4rem; }
+
+  .icon-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.6rem;
+    font-family: 'DM Mono', monospace;
+    transition: all 0.2s;
+  }
+
+  .icon-btn:hover { border-color: var(--accent1); color: var(--accent1); }
+  .icon-btn.save-btn:hover { border-color: var(--accent3); color: var(--accent3); }
+
+  .output-content {
+    padding: 0.8rem;
+    font-size: 0.72rem;
+    line-height: 1.7;
+    color: var(--text);
+    white-space: pre-wrap;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 0.9rem;
+  }
+
+  .output-image-prompt {
+    padding: 0.6rem 0.8rem;
+    background: color-mix(in srgb, var(--accent2) 6%, transparent);
+    border-top: 1px solid var(--border);
+    font-size: 0.62rem;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .output-image-prompt strong { color: var(--accent2); }
+
+  /* Loading */
+  .loading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    color: var(--muted);
+    font-size: 0.7rem;
+  }
+
+  .dots span {
+    animation: blink 1.2s infinite;
+    font-size: 1.2rem;
+    line-height: 1;
+  }
+  .dots span:nth-child(2) { animation-delay: 0.2s; }
+  .dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes blink { 0%,100%{opacity:0.2} 50%{opacity:1} }
+
+  .empty-state {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--muted);
+    font-size: 0.7rem;
+    line-height: 2;
+  }
+
+  .empty-state .big { font-family: 'Playfair Display', serif; font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.3; }
+
+  /* Saved posts modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 80vh;
+    overflow-y: auto;
+    animation: fadeSlide 0.2s ease;
+  }
+
+  .modal-header {
+    padding: 1.2rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .modal-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+  }
+
+  .close-btn {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.2rem;
+  }
+  .close-btn:hover { color: var(--text); }
+
+  .modal-body { padding: 1.2rem 1.5rem; }
+
+  .date-input-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .date-input-row input, .date-input-row select {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .date-input-row input:focus, .date-input-row select:focus { outline: none; border-color: var(--accent2); }
+
+  .modal-footer {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .modal-btn {
+    flex: 1;
+    padding: 0.6rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .modal-btn.primary {
+    background: linear-gradient(135deg, var(--accent2), var(--accent3));
+    border: none;
+    color: white;
+  }
+
+  .modal-btn:hover { border-color: var(--text); color: var(--text); }
+  .modal-btn.primary:hover { opacity: 0.88; }
+
+  .saved-content-preview {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.8rem;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    max-height: 140px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .platform-badge {
+    font-size: 0.55rem;
+    opacity: 0.7;
+    margin-left: 0.3rem;
+  }
+
+  .stats-row {
+    display: flex;
+    gap: 1rem;
+    padding: 0.8rem 2.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .stat {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.62rem;
+    color: var(--muted);
+  }
+
+  .stat-dot { width: 6px; height: 6px; border-radius: 50%; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Meri's <span>Content Studio</span></div>
+  <div class="week-nav">
+    <button id="prevMonth">‹</button>
+    <div class="week-label" id="monthLabel"></div>
+    <button id="nextMonth">›</button>
+  </div>
+</header>
+
+<div class="stats-row" id="statsRow">
+  <div class="stat"><div class="stat-dot" style="background:var(--personal)"></div><span id="stat-personal">0 personal posts</span></div>
+  <div class="stat"><div class="stat-dot" style="background:var(--studio)"></div><span id="stat-studio">0 studio posts</span></div>
+  <div class="stat"><div class="stat-dot" style="background:var(--ai)"></div><span id="stat-ai">0 ai engineer posts</span></div>
+</div>
+
+<div class="account-tabs">
+  <button class="tab all active" onclick="filterAccount('all', this)">All Accounts</button>
+  <button class="tab personal" onclick="filterAccount('personal', this)">📸 Personal IG (RU/EN)</button>
+  <button class="tab studio" onclick="filterAccount('studio', this)">🏛️ Soul Studio IG</button>
+  <button class="tab ai" onclick="filterAccount('ai', this)">🤖 AI Engineer</button>
+</div>
+
+<div class="main">
+  <div class="calendar-pane">
+    <div class="calendar-grid" id="calGrid"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">✦ Content Generator</div>
+
+    <div class="generator">
+      <div class="gen-label">Account</div>
+      <div class="account-select-row">
+        <button class="acc-btn personal sel" onclick="toggleAcc(this,'personal')">📸 Personal</button>
+        <button class="acc-btn studio" onclick="toggleAcc(this,'studio')">🏛️ Soul Studio</button>
+        <button class="acc-btn ai-eng" onclick="toggleAcc(this,'ai-eng')">🤖 AI Engineer</button>
+      </div>
+
+      <div id="platformRow" class="platform-row"></div>
+
+      <div class="gen-label" id="langRowLabel" style="display:none">Language</div>
+      <div class="lang-row" id="langRow" style="display:none">
+        <button class="lang-btn sel" onclick="toggleLang(this,'EN')">EN — English</button>
+        <button class="lang-btn" onclick="toggleLang(this,'RU')">RU — Russian</button>
+        <button class="lang-btn" onclick="toggleLang(this,'BOTH')">Both</button>
+      </div>
+
+      <div class="gen-label">Your prompt</div>
+      <textarea class="prompt-area" id="promptInput" placeholder="e.g. Building CogniAI — the moment I realized no one was solving this for parents..."></textarea>
+
+      <button class="gen-btn" id="genBtn" onclick="generateContent()">✦ Generate Content</button>
+    </div>
+
+    <div class="output-area" id="outputArea">
+      <div class="empty-state">
+        <span class="big">✦</span>
+        Pick an account, type a prompt<br>and generate platform-ready content.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Schedule Post</div>
+      <button class="close-btn" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="gen-label">Content Preview</div>
+      <div class="saved-content-preview" id="modalPreview"></div>
+      <div class="gen-label">Schedule for</div>
+      <div class="date-input-row">
+        <input type="date" id="schedDate">
+        <select id="schedAccount">
+          <option value="personal">📸 Personal IG</option>
+          <option value="studio">🏛️ Soul Studio</option>
+          <option value="ai">🤖 AI Engineer</option>
+        </select>
+      </div>
+      <div class="gen-label">Platform</div>
+      <div class="date-input-row">
+        <select id="schedPlatform">
+          <option value="Instagram">Instagram</option>
+          <option value="LinkedIn">LinkedIn</option>
+          <option value="X">X / Twitter</option>
+          <option value="Medium">Medium</option>
+          <option value="Substack">Substack</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn" onclick="closeModal()">Cancel</button>
+        <button class="modal-btn primary" onclick="confirmSchedule()">Add to Calendar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────
+let currentDate = new Date();
+let viewYear = currentDate.getFullYear();
+let viewMonth = currentDate.getMonth();
+let scheduledPosts = JSON.parse(localStorage.getItem('meri_posts') || '{}');
+let activeFilter = 'all';
+let selectedAccount = 'personal';
+let selectedPlatforms = ['Instagram'];
+let selectedLang = 'EN';
+let pendingContent = '';
+let pendingAccount = '';
+let pendingPlatform = '';
+
+// Platform options per account
+const accountPlatforms = {
+  'personal': ['Instagram'],
+  'studio': ['Instagram'],
+  'ai-eng': ['LinkedIn', 'X', 'Medium', 'Substack']
+};
+
+const accountMap = {
+  'personal': 'personal',
+  'studio': 'studio',
+  'ai-eng': 'ai'
+};
+
+// ─── Calendar ────────────────────────────────────────────────────
+function renderCalendar() {
+  const grid = document.getElementById('calGrid');
+  const label = document.getElementById('monthLabel');
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  label.textContent = `${monthNames[viewMonth]} ${viewYear}`;
+
+  let html = days.map(d => `<div class="day-header">${d}</div>`).join('');
+
+  const firstDay = new Date(viewYear, viewMonth, 1);
+  const lastDay = new Date(viewYear, viewMonth + 1, 0);
+  
+  // Monday-first adjustment
+  let startDow = firstDay.getDay(); // 0=Sun
+  startDow = startDow === 0 ? 6 : startDow - 1;
+
+  const today = new Date();
+
+  // Fill prev month
+  for (let i = 0; i < startDow; i++) {
+    const d = new Date(viewYear, viewMonth, -startDow + i + 1);
+    html += renderDay(d, true);
+  }
+
+  // Fill this month
+  for (let d = 1; d <= lastDay.getDate(); d++) {
+    const date = new Date(viewYear, viewMonth, d);
+    const isToday = date.toDateString() === today.toDateString();
+    html += renderDay(date, false, isToday);
+  }
+
+  // Fill next month
+  const total = startDow + lastDay.getDate();
+  const remaining = total % 7 === 0 ? 0 : 7 - (total % 7);
+  for (let i = 1; i <= remaining; i++) {
+    const d = new Date(viewYear, viewMonth + 1, i);
+    html += renderDay(d, true);
+  }
+
+  grid.innerHTML = html;
+  updateStats();
+}
+
+function renderDay(date, otherMonth, isToday = false) {
+  const key = dateKey(date);
+  const posts = (scheduledPosts[key] || []).filter(p => activeFilter === 'all' || p.account === activeFilter);
+
+  let cls = 'day-cell' + (otherMonth ? ' other-month' : '') + (isToday ? ' today' : '');
+
+  let chipsHtml = posts.slice(0,3).map(p => `
+    <div class="post-chip ${p.account}" title="${p.content.substring(0,80)}">
+      <div class="chip-dot"></div>
+      <span class="chip-text">${p.platform}: ${p.content.substring(0,22)}…</span>
+    </div>
+  `).join('');
+
+  if (posts.length > 3) {
+    chipsHtml += `<div style="font-size:0.55rem;color:var(--muted);padding:0.1rem 0.3rem">+${posts.length-3} more</div>`;
+  }
+
+  return `
+    <div class="${cls}" onclick="selectDay('${key}')">
+      <div class="day-num">${date.getDate()}</div>
+      ${chipsHtml}
+      <button class="add-post-btn" onclick="quickAdd(event,'${key}')">+</button>
+    </div>
+  `;
+}
+
+function dateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+
+function updateStats() {
+  const all = Object.values(scheduledPosts).flat();
+  document.getElementById('stat-personal').textContent = `${all.filter(p=>p.account==='personal').length} personal posts`;
+  document.getElementById('stat-studio').textContent = `${all.filter(p=>p.account==='studio').length} studio posts`;
+  document.getElementById('stat-ai').textContent = `${all.filter(p=>p.account==='ai').length} ai engineer posts`;
+}
+
+document.getElementById('prevMonth').onclick = () => {
+  viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+  renderCalendar();
+};
+
+document.getElementById('nextMonth').onclick = () => {
+  viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+  renderCalendar();
+};
+
+// ─── Filters ─────────────────────────────────────────────────────
+function filterAccount(acc, el) {
+  activeFilter = acc;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderCalendar();
+}
+
+// ─── Generator UI ────────────────────────────────────────────────
+function toggleAcc(btn, acc) {
+  document.querySelectorAll('.acc-btn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+  selectedAccount = acc;
+  selectedPlatforms = [...accountPlatforms[acc]];
+  renderPlatformRow();
+  // Show lang only for personal
+  const langRow = document.getElementById('langRow');
+  const langLabel = document.getElementById('langRowLabel');
+  if (acc === 'personal') { langRow.style.display = 'flex'; langLabel.style.display = 'block'; }
+  else { langRow.style.display = 'none'; langLabel.style.display = 'none'; }
+}
+
+function renderPlatformRow() {
+  const plats = accountPlatforms[selectedAccount];
+  const row = document.getElementById('platformRow');
+  if (plats.length <= 1) { row.innerHTML = ''; return; }
+  row.innerHTML = `<div class="gen-label" style="width:100%;margin-bottom:0.4rem">Platforms</div>` +
+    plats.map(p => `<button class="plat-btn ${selectedPlatforms.includes(p)?'sel':''}" onclick="togglePlat(this,'${p}')">${p}</button>`).join('');
+}
+
+function togglePlat(btn, p) {
+  if (selectedPlatforms.includes(p)) {
+    if (selectedPlatforms.length === 1) return;
+    selectedPlatforms = selectedPlatforms.filter(x => x !== p);
+    btn.classList.remove('sel');
+  } else {
+    selectedPlatforms.push(p);
+    btn.classList.add('sel');
+  }
+}
+
+function toggleLang(btn, lang) {
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+  selectedLang = lang;
+}
+
+// ─── AI Generation ───────────────────────────────────────────────
+const systemPrompts = {
+  personal: {
+    Instagram: (lang) => `You are a personal brand content writer for Meri, a Russian-American AI engineer, founder of CogniAI, and mom. She builds in public and shares her journey authentically. Write an Instagram caption in ${lang === 'BOTH' ? 'English first, then Russian (translate below)' : lang === 'RU' ? 'Russian' : 'English'}. Style: first-person, warm, real, slightly vulnerable, aspirational but never braggy. Include 5-8 relevant hashtags. Also suggest an AI image generation prompt for the visual. Format: Caption first, then "---IMAGE PROMPT---" then the image prompt.`,
+  },
+  studio: {
+    Instagram: () => `You are a content writer for Soul Studio, a premium creative rental space in the Chicago area. Write an Instagram caption that attracts photographers, content creators, and small businesses. Tone: warm luxury, aspirational, community-driven. Highlight the space's versatility and vibe. Include 6-8 hashtags. Also suggest an AI image generation prompt showing a beautiful studio scene. Format: Caption first, then "---IMAGE PROMPT---" then the prompt.`,
+  },
+  'ai-eng': {
+    LinkedIn: () => `You are writing for Meri's AI Engineer personal brand on LinkedIn. She builds CogniAI (AI for ASD therapy data), teaches AI, and shares founder insights. Write a LinkedIn post that's story-driven, insightful, and builds authority. First-person. Concrete. No corporate fluff. End with a thought-provoking question to drive comments.`,
+    X: () => `You are writing for Meri's X/Twitter as an AI engineer and founder. Style: punchy, smart, opinionated. Short sentences. No hashtags except 1-2 max. Can be a thread (prefix each tweet with a number) or single tweet under 280 chars. Make it scroll-stopping.`,
+    Medium: () => `You are writing for Meri's Medium/Substack as an AI engineer founder. Write a compelling article intro (first 3 paragraphs only) that hooks the reader with a story or bold claim, then introduces the thesis. First-person, analytical, founder perspective. Markdown formatting is fine.`,
+    Substack: () => `You are writing for Meri's Substack newsletter as an AI engineer founder building CogniAI. Write a newsletter opening section — personal, warm, analytical, like writing to smart friends. Include what Meri is thinking about this week. First-person narrative style.`,
+  }
+};
+
+async function generateContent() {
+  const prompt = document.getElementById('promptInput').value.trim();
+  if (!prompt) { document.getElementById('promptInput').focus(); return; }
+
+  const btn = document.getElementById('genBtn');
+  btn.disabled = true;
+  btn.textContent = '✦ Generating…';
+
+  const outputArea = document.getElementById('outputArea');
+  outputArea.innerHTML = `<div class="loading"><div class="dots"><span>·</span><span>·</span><span>·</span></div> Writing your content</div>`;
+
+  const plats = accountPlatforms[selectedAccount];
+  const results = [];
+
+  for (const plat of selectedPlatforms.length > 0 ? selectedPlatforms : plats) {
+    const sysKey = selectedAccount;
+    const sys = systemPrompts[sysKey]?.[plat];
+    if (!sys) continue;
+
+    const systemMsg = sys(selectedLang);
+
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          system: systemMsg,
+          messages: [{ role: 'user', content: `Topic / prompt: ${prompt}` }]
+        })
+      });
+
+      const data = await resp.json();
+      const text = data.content?.map(b => b.text || '').join('') || 'No response.';
+      results.push({ platform: plat, account: accountMap[selectedAccount], text });
+    } catch(e) {
+      results.push({ platform: plat, account: accountMap[selectedAccount], text: 'Error generating content. Please try again.' });
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = '✦ Generate Content';
+
+  if (results.length === 0) {
+    outputArea.innerHTML = `<div class="empty-state">No platforms selected.</div>`;
+    return;
+  }
+
+  outputArea.innerHTML = results.map((r, i) => {
+    const parts = r.text.split('---IMAGE PROMPT---');
+    const caption = parts[0].trim();
+    const imgPrompt = parts[1]?.trim();
+
+    return `
+      <div class="output-block">
+        <div class="output-block-header">
+          <div class="output-platform-tag ${r.account}">${r.account === 'ai' ? '🤖' : r.account === 'personal' ? '📸' : '🏛️'} ${r.platform}</div>
+          <div class="output-actions">
+            <button class="icon-btn" onclick="copyContent(${i})">Copy</button>
+            <button class="icon-btn save-btn" onclick="openModal(${i})">Schedule</button>
+          </div>
+        </div>
+        <div class="output-content" id="content-${i}">${caption}</div>
+        ${imgPrompt ? `<div class="output-image-prompt"><strong>✦ IMAGE PROMPT:</strong> ${imgPrompt}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  // Store for modal access
+  window._lastResults = results;
+}
+
+function copyContent(i) {
+  const el = document.getElementById(`content-${i}`);
+  navigator.clipboard.writeText(el.textContent);
+  // Brief feedback
+  const btn = el.closest('.output-block').querySelector('.icon-btn');
+  btn.textContent = 'Copied!';
+  setTimeout(() => btn.textContent = 'Copy', 1500);
+}
+
+// ─── Modal ───────────────────────────────────────────────────────
+function openModal(i) {
+  const r = window._lastResults[i];
+  pendingContent = r.text.split('---IMAGE PROMPT---')[0].trim();
+  pendingAccount = r.account;
+  pendingPlatform = r.platform;
+
+  document.getElementById('modalPreview').textContent = pendingContent.substring(0, 200) + (pendingContent.length > 200 ? '…' : '');
+  document.getElementById('schedAccount').value = r.account;
+  document.getElementById('schedPlatform').value = r.platform;
+
+  // Set date to today
+  const today = new Date();
+  document.getElementById('schedDate').value = dateKey(today);
+
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+function confirmSchedule() {
+  const date = document.getElementById('schedDate').value;
+  const account = document.getElementById('schedAccount').value;
+  const platform = document.getElementById('schedPlatform').value;
+
+  if (!date) return;
+
+  if (!scheduledPosts[date]) scheduledPosts[date] = [];
+  scheduledPosts[date].push({ account, platform, content: pendingContent, created: new Date().toISOString() });
+  localStorage.setItem('meri_posts', JSON.stringify(scheduledPosts));
+
+  closeModal();
+  renderCalendar();
+}
+
+function quickAdd(event, key) {
+  event.stopPropagation();
+  document.getElementById('schedDate').value = key;
+  document.getElementById('modalPreview').textContent = 'Write your post content in the generator first, then schedule it — or add a manual note here.';
+  pendingContent = '(Manual placeholder)';
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function selectDay(key) {
+  // Could expand to show day detail panel
+}
+
+// ─── Init ────────────────────────────────────────────────────────
+renderPlatformRow();
+renderCalendar();
+
+// Set today's date in modal by default
+document.getElementById('schedDate').value = dateKey(new Date());
+</script>
+</body>
+</html>
