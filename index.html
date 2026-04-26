@@ -612,6 +612,81 @@
     margin-bottom: 1rem;
   }
 
+  .manage-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    max-height: 45vh;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+  }
+
+  .manage-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.7rem;
+  }
+
+  .manage-item-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+    font-size: 0.62rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .manage-item-content {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin-bottom: 0.6rem;
+    white-space: pre-wrap;
+  }
+
+  .manage-actions {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .manage-btn {
+    padding: 0.28rem 0.55rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    cursor: pointer;
+  }
+
+  .manage-btn:hover { border-color: var(--text); color: var(--text); }
+
+  .manage-editor {
+    border-top: 1px solid var(--border);
+    padding-top: 0.8rem;
+    margin-top: 0.2rem;
+  }
+
+  .manage-editor textarea {
+    width: 100%;
+    min-height: 95px;
+    resize: vertical;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 0.6rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    margin-bottom: 0.6rem;
+  }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -801,6 +876,43 @@
   </div>
 </div>
 
+<!-- Day Manager Modal -->
+<div class="modal-overlay" id="manageOverlay" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="manageTitle">
+    <div class="modal-header">
+      <div class="modal-title" id="manageTitle">Manage Scheduled Posts</div>
+      <button class="close-btn" onclick="closeManageModal()" aria-label="Close post manager">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="gen-label" id="manageDateLabel">Date</div>
+      <div id="manageList" class="manage-list"></div>
+      <div id="manageEditor" class="manage-editor" style="display:none">
+        <div class="gen-label">Edit post</div>
+        <textarea id="editContent" aria-label="Edit post content"></textarea>
+        <div class="date-input-row">
+          <input type="date" id="editDate">
+          <select id="editAccount">
+            <option value="personal">📸 Personal IG</option>
+            <option value="studio">🏛️ Soul Studio</option>
+            <option value="ai">🤖 AI Engineer</option>
+          </select>
+          <select id="editPlatform">
+            <option value="Instagram">Instagram</option>
+            <option value="LinkedIn">LinkedIn</option>
+            <option value="X">X / Twitter</option>
+            <option value="Medium">Medium</option>
+            <option value="Substack">Substack</option>
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn" onclick="cancelEditPost()">Cancel Edit</button>
+          <button class="modal-btn primary" onclick="saveEditedPost()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ─── State ───────────────────────────────────────────────────────
 let currentDate = new Date();
@@ -817,6 +929,8 @@ let pendingPlatform = '';
 let generationController = null;
 let isGenerating = false;
 let cloudUserId = localStorage.getItem('meri_user_id') || 'meri-main';
+let selectedDayKey = '';
+let editPostIndex = -1;
 
 // Platform options per account
 const accountPlatforms = {
@@ -1380,7 +1494,130 @@ function quickAdd(event, key) {
 }
 
 function selectDay(key) {
-  // Could expand to show day detail panel
+  selectedDayKey = key;
+  editPostIndex = -1;
+  document.getElementById('manageDateLabel').textContent = `Date: ${key}`;
+  renderManageList();
+  cancelEditPost();
+  const overlay = document.getElementById('manageOverlay');
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+}
+
+function closeManageModal() {
+  const overlay = document.getElementById('manageOverlay');
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+  cancelEditPost();
+}
+
+function renderManageList() {
+  const list = document.getElementById('manageList');
+  const posts = scheduledPosts[selectedDayKey] || [];
+  if (posts.length === 0) {
+    list.innerHTML = `<div class="empty-state" style="padding:1rem 0.4rem">No scheduled posts for this day.</div>`;
+    return;
+  }
+
+  list.innerHTML = posts.map((post, index) => `
+    <div class="manage-item">
+      <div class="manage-item-head">
+        <span>${post.account} · ${post.platform}</span>
+        <span>${new Date(post.created || Date.now()).toLocaleString()}</span>
+      </div>
+      <div class="manage-item-content">${post.content}</div>
+      <div class="manage-actions">
+        <button class="manage-btn" onclick="startEditPost(${index})">Edit</button>
+        <button class="manage-btn" onclick="duplicatePost(${index})">Duplicate</button>
+        <button class="manage-btn" onclick="movePost(${index})">Move</button>
+        <button class="manage-btn" onclick="deletePost(${index})">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function startEditPost(index) {
+  const post = (scheduledPosts[selectedDayKey] || [])[index];
+  if (!post) return;
+  editPostIndex = index;
+  document.getElementById('editContent').value = post.content || '';
+  document.getElementById('editDate').value = selectedDayKey;
+  document.getElementById('editAccount').value = post.account || 'personal';
+  document.getElementById('editPlatform').value = post.platform || 'Instagram';
+  document.getElementById('manageEditor').style.display = 'block';
+  document.getElementById('editContent').focus();
+}
+
+function cancelEditPost() {
+  editPostIndex = -1;
+  document.getElementById('manageEditor').style.display = 'none';
+}
+
+function saveEditedPost() {
+  const posts = scheduledPosts[selectedDayKey] || [];
+  const post = posts[editPostIndex];
+  if (!post) return;
+
+  const nextDate = document.getElementById('editDate').value || selectedDayKey;
+  const nextContent = document.getElementById('editContent').value.trim();
+  const nextAccount = document.getElementById('editAccount').value;
+  const nextPlatform = document.getElementById('editPlatform').value;
+  if (!nextContent) return;
+
+  const updated = { ...post, content: nextContent, account: nextAccount, platform: nextPlatform };
+  posts.splice(editPostIndex, 1);
+  if (posts.length === 0) delete scheduledPosts[selectedDayKey];
+
+  if (!scheduledPosts[nextDate]) scheduledPosts[nextDate] = [];
+  scheduledPosts[nextDate].push(updated);
+
+  selectedDayKey = nextDate;
+  document.getElementById('manageDateLabel').textContent = `Date: ${selectedDayKey}`;
+  cancelEditPost();
+  renderManageList();
+  renderCalendar();
+  persistPosts();
+}
+
+function deletePost(index) {
+  const posts = scheduledPosts[selectedDayKey] || [];
+  if (!posts[index]) return;
+  posts.splice(index, 1);
+  if (posts.length === 0) delete scheduledPosts[selectedDayKey];
+  cancelEditPost();
+  renderManageList();
+  renderCalendar();
+  persistPosts();
+}
+
+function duplicatePost(index) {
+  const posts = scheduledPosts[selectedDayKey] || [];
+  const post = posts[index];
+  if (!post) return;
+  posts.splice(index + 1, 0, { ...post, created: new Date().toISOString() });
+  renderManageList();
+  renderCalendar();
+  persistPosts();
+}
+
+function movePost(index) {
+  const posts = scheduledPosts[selectedDayKey] || [];
+  const post = posts[index];
+  if (!post) return;
+  const target = prompt('Move to date (YYYY-MM-DD):', selectedDayKey);
+  if (!target || !/^\d{4}-\d{2}-\d{2}$/.test(target)) return;
+
+  posts.splice(index, 1);
+  if (posts.length === 0) delete scheduledPosts[selectedDayKey];
+  if (!scheduledPosts[target]) scheduledPosts[target] = [];
+  scheduledPosts[target].push({ ...post });
+
+  selectedDayKey = target;
+  document.getElementById('manageDateLabel').textContent = `Date: ${selectedDayKey}`;
+  cancelEditPost();
+  renderManageList();
+  renderCalendar();
+  persistPosts();
 }
 
 // ─── Init ────────────────────────────────────────────────────────
@@ -1398,10 +1635,20 @@ document.getElementById('modalOverlay').addEventListener('click', (event) => {
   }
 });
 
+document.getElementById('manageOverlay').addEventListener('click', (event) => {
+  if (event.target.id === 'manageOverlay') {
+    closeManageModal();
+  }
+});
+
 document.addEventListener('keydown', (event) => {
   const isModalOpen = document.getElementById('modalOverlay').classList.contains('open');
+  const isManageOpen = document.getElementById('manageOverlay').classList.contains('open');
   if (isModalOpen && event.key === 'Escape') {
     closeModal();
+  }
+  if (isManageOpen && event.key === 'Escape') {
+    closeManageModal();
   }
 });
 </script>
