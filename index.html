@@ -61,6 +61,7 @@
     font-weight: 700;
     letter-spacing: -0.02em;
     background: linear-gradient(135deg, var(--accent1), var(--accent3));
+    background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
@@ -137,6 +138,15 @@
 
   .tab.all.active { background: var(--surface2); border-color: var(--text); color: var(--text); }
 
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--accent2);
+    outline-offset: 2px;
+  }
+
   /* Main layout */
   .main { display: flex; height: calc(100vh - 130px); }
 
@@ -174,6 +184,7 @@
   }
 
   .day-cell:hover { border-color: var(--accent2); }
+  .day-cell:focus-visible { border-color: var(--accent2); }
   .day-cell.selected { border-color: var(--accent2); background: color-mix(in srgb, var(--accent2) 6%, var(--surface)); }
   .day-cell.today .day-num { color: var(--accent1); }
 
@@ -626,9 +637,9 @@
 <header>
   <div class="logo">Meri's <span>Content Studio</span></div>
   <div class="week-nav">
-    <button id="prevMonth">‹</button>
+    <button id="prevMonth" aria-label="Previous month">‹</button>
     <div class="week-label" id="monthLabel"></div>
-    <button id="nextMonth">›</button>
+    <button id="nextMonth" aria-label="Next month">›</button>
   </div>
 </header>
 
@@ -647,7 +658,7 @@
 
 <div class="main">
   <div class="calendar-pane">
-    <div class="calendar-grid" id="calGrid"></div>
+    <div class="calendar-grid" id="calGrid" role="grid" aria-label="Content calendar"></div>
   </div>
 
   <div class="panel">
@@ -671,12 +682,12 @@
       </div>
 
       <div class="gen-label">Your prompt</div>
-      <textarea class="prompt-area" id="promptInput" placeholder="e.g. Building CogniAI — the moment I realized no one was solving this for parents..."></textarea>
+      <textarea class="prompt-area" id="promptInput" aria-label="Content prompt" placeholder="e.g. Building CogniAI — the moment I realized no one was solving this for parents..."></textarea>
 
       <button class="gen-btn" id="genBtn" onclick="generateContent()">✦ Generate Content</button>
     </div>
 
-    <div class="output-area" id="outputArea">
+    <div class="output-area" id="outputArea" aria-live="polite">
       <div class="empty-state">
         <span class="big">✦</span>
         Pick an account, type a prompt<br>and generate platform-ready content.
@@ -686,11 +697,11 @@
 </div>
 
 <!-- Schedule Modal -->
-<div class="modal-overlay" id="modalOverlay">
-  <div class="modal">
+<div class="modal-overlay" id="modalOverlay" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-header">
-      <div class="modal-title">Schedule Post</div>
-      <button class="close-btn" onclick="closeModal()">×</button>
+      <div class="modal-title" id="modalTitle">Schedule Post</div>
+      <button class="close-btn" onclick="closeModal()" aria-label="Close schedule modal">×</button>
     </div>
     <div class="modal-body">
       <div class="gen-label">Content Preview</div>
@@ -811,13 +822,24 @@ function renderDay(date, otherMonth, isToday = false) {
     chipsHtml += `<div style="font-size:0.55rem;color:var(--muted);padding:0.1rem 0.3rem">+${posts.length-3} more</div>`;
   }
 
+  const monthLabel = date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+  const postCountLabel = posts.length === 1 ? '1 scheduled post' : `${posts.length} scheduled posts`;
+  const ariaLabel = `${monthLabel}. ${postCountLabel}.`;
+
   return `
-    <div class="${cls}" onclick="selectDay('${key}')">
+    <div class="${cls}" role="button" tabindex="0" aria-label="${ariaLabel}" onclick="selectDay('${key}')" onkeydown="handleDayKeydown(event,'${key}')">
       <div class="day-num">${date.getDate()}</div>
       ${chipsHtml}
-      <button class="add-post-btn" onclick="quickAdd(event,'${key}')">+</button>
+      <button class="add-post-btn" aria-label="Quick add post for ${monthLabel}" onclick="quickAdd(event,'${key}')">+</button>
     </div>
   `;
+}
+
+function handleDayKeydown(event, key) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    selectDay(key);
+  }
 }
 
 function dateKey(date) {
@@ -1001,11 +1023,16 @@ function openModal(i) {
   const today = new Date();
   document.getElementById('schedDate').value = dateKey(today);
 
-  document.getElementById('modalOverlay').classList.add('open');
+  const overlay = document.getElementById('modalOverlay');
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.getElementById('schedDate').focus();
 }
 
 function closeModal() {
-  document.getElementById('modalOverlay').classList.remove('open');
+  const overlay = document.getElementById('modalOverlay');
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
 }
 
 function confirmSchedule() {
@@ -1028,7 +1055,10 @@ function quickAdd(event, key) {
   document.getElementById('schedDate').value = key;
   document.getElementById('modalPreview').textContent = 'Write your post content in the generator first, then schedule it — or add a manual note here.';
   pendingContent = '(Manual placeholder)';
-  document.getElementById('modalOverlay').classList.add('open');
+  const overlay = document.getElementById('modalOverlay');
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.getElementById('schedDate').focus();
 }
 
 function selectDay(key) {
@@ -1041,6 +1071,19 @@ renderCalendar();
 
 // Set today's date in modal by default
 document.getElementById('schedDate').value = dateKey(new Date());
+
+document.getElementById('modalOverlay').addEventListener('click', (event) => {
+  if (event.target.id === 'modalOverlay') {
+    closeModal();
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  const isModalOpen = document.getElementById('modalOverlay').classList.contains('open');
+  if (isModalOpen && event.key === 'Escape') {
+    closeModal();
+  }
+});
 </script>
 </body>
 </html>
