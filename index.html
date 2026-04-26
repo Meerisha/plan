@@ -395,6 +395,7 @@
     overflow: hidden;
     animation: fadeSlide 0.3s ease;
   }
+  .output-block.error { border-color: color-mix(in srgb, var(--accent3) 40%, var(--border)); }
 
   @keyframes fadeSlide {
     from { opacity: 0; transform: translateY(8px); }
@@ -459,6 +460,15 @@
   }
 
   .output-image-prompt strong { color: var(--accent2); }
+
+  .output-error-note {
+    padding: 0.6rem 0.8rem;
+    border-top: 1px solid var(--border);
+    color: var(--accent3);
+    font-size: 0.64rem;
+    line-height: 1.5;
+    background: color-mix(in srgb, var(--accent3) 8%, transparent);
+  }
 
   /* Loading */
   .loading {
@@ -630,6 +640,53 @@
   }
 
   .stat-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  .sync-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.7rem 2.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    flex-wrap: wrap;
+  }
+
+  .sync-label {
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .sync-input {
+    min-width: 160px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 5px;
+    padding: 0.4rem 0.55rem;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+  }
+
+  .sync-btn {
+    padding: 0.35rem 0.65rem;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.62rem;
+  }
+
+  .sync-btn:hover { border-color: var(--accent1); color: var(--accent1); }
+
+  .sync-status {
+    margin-left: auto;
+    font-size: 0.62rem;
+    color: var(--muted);
+  }
 </style>
 </head>
 <body>
@@ -647,6 +704,17 @@
   <div class="stat"><div class="stat-dot" style="background:var(--personal)"></div><span id="stat-personal">0 personal posts</span></div>
   <div class="stat"><div class="stat-dot" style="background:var(--studio)"></div><span id="stat-studio">0 studio posts</span></div>
   <div class="stat"><div class="stat-dot" style="background:var(--ai)"></div><span id="stat-ai">0 ai engineer posts</span></div>
+</div>
+
+<div class="sync-row">
+  <div class="sync-label">Cloud user ID</div>
+  <input id="userIdInput" class="sync-input" placeholder="e.g. meri-main" aria-label="Cloud user id">
+  <button class="sync-btn" onclick="saveUserId()">Save ID</button>
+  <button class="sync-btn" onclick="syncFromCloud()">Sync</button>
+  <button class="sync-btn" onclick="exportBackup()">Backup</button>
+  <button class="sync-btn" onclick="triggerImport()">Restore</button>
+  <input id="importFile" type="file" accept="application/json" style="display:none" onchange="importBackup(event)">
+  <div class="sync-status" id="syncStatus">Local mode</div>
 </div>
 
 <div class="account-tabs">
@@ -746,6 +814,9 @@ let selectedLang = 'EN';
 let pendingContent = '';
 let pendingAccount = '';
 let pendingPlatform = '';
+let generationController = null;
+let isGenerating = false;
+let cloudUserId = localStorage.getItem('meri_user_id') || 'meri-main';
 
 // Platform options per account
 const accountPlatforms = {
@@ -759,6 +830,191 @@ const accountMap = {
   'studio': 'studio',
   'ai-eng': 'ai'
 };
+
+function parseAnthropicError(status, payload) {
+  const message = payload?.error?.message || payload?.message || '';
+  if (status === 401 || status === 403) {
+    return 'Authentication failed. Add a valid Anthropic API key to continue.';
+  }
+  if (status === 429) {
+    return 'Rate limit reached. Please wait a moment and try again.';
+  }
+  if (status >= 500) {
+    return 'Anthropic is temporarily unavailable. Please try again shortly.';
+  }
+  if (message) {
+    return message;
+  }
+  return `Request failed with status ${status}.`;
+}
+
+function setSyncStatus(text) {
+  const el = document.getElementById('syncStatus');
+  if (el) el.textContent = text;
+}
+
+function persistLocal() {
+  localStorage.setItem('meri_posts', JSON.stringify(scheduledPosts));
+}
+
+async function persistPosts() {
+  persistLocal();
+  try {
+    const resp = await fetch('/api/posts', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': cloudUserId
+      },
+      body: JSON.stringify({ posts: scheduledPosts })
+    });
+    if (!resp.ok) throw new Error('cloud save failed');
+    setSyncStatus('Cloud synced');
+  } catch (_e) {
+    setSyncStatus('Saved locally (cloud unavailable)');
+  }
+}
+
+async function syncFromCloud() {
+  setSyncStatus('Syncing...');
+  try {
+    const resp = await fetch('/api/posts', {
+      headers: {
+        'x-user-id': cloudUserId
+      }
+    });
+    if (!resp.ok) throw new Error('cloud fetch failed');
+    const data = await resp.json();
+    scheduledPosts = data.posts || {};
+    persistLocal();
+    renderCalendar();
+    setSyncStatus(`Synced as ${cloudUserId}`);
+  } catch (_e) {
+    setSyncStatus('Cloud unavailable, using local');
+  }
+}
+
+function saveUserId() {
+  const input = document.getElementById('userIdInput');
+  const raw = (input.value || '').trim().toLowerCase();
+  const clean = raw.replace(/[^a-z0-9_-]/g, '').slice(0, 64);
+  if (!clean) {
+    input.value = cloudUserId;
+    return;
+  }
+  cloudUserId = clean;
+  input.value = clean;
+  localStorage.setItem('meri_user_id', cloudUserId);
+  syncFromCloud();
+}
+
+async function exportBackup() {
+  try {
+    const resp = await fetch('/api/backup/export', {
+      headers: { 'x-user-id': cloudUserId }
+    });
+    if (!resp.ok) throw new Error('export failed');
+    const data = await resp.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `meri-backup-${cloudUserId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setSyncStatus('Backup downloaded');
+  } catch (_e) {
+    setSyncStatus('Backup failed');
+  }
+}
+
+function triggerImport() {
+  document.getElementById('importFile').click();
+}
+
+async function importBackup(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const posts = parsed.posts || {};
+    const resp = await fetch('/api/backup/import', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': cloudUserId
+      },
+      body: JSON.stringify({ posts })
+    });
+    if (!resp.ok) throw new Error('import failed');
+    scheduledPosts = posts;
+    persistLocal();
+    renderCalendar();
+    setSyncStatus('Backup restored');
+  } catch (_e) {
+    setSyncStatus('Restore failed');
+  } finally {
+    event.target.value = '';
+  }
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRetryAfterMs(resp) {
+  const retryAfter = resp?.headers?.get('retry-after');
+  if (!retryAfter) return null;
+  const asNumber = Number(retryAfter);
+  if (!Number.isNaN(asNumber)) return Math.max(0, asNumber * 1000);
+  const asDate = Date.parse(retryAfter);
+  if (!Number.isNaN(asDate)) return Math.max(0, asDate - Date.now());
+  return null;
+}
+
+function isRetryableStatus(status) {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+async function fetchWithTimeoutAndRetry(url, options, { signal, timeoutMs = 25000, maxRetries = 2 } = {}) {
+  let attempt = 0;
+  while (true) {
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(new Error('timeout')), timeoutMs);
+
+    const combinedSignal = signal
+      ? AbortSignal.any([signal, timeoutController.signal])
+      : timeoutController.signal;
+
+    try {
+      const response = await fetch(url, { ...options, signal: combinedSignal });
+      clearTimeout(timeoutId);
+
+      if (response.ok || !isRetryableStatus(response.status) || attempt >= maxRetries) {
+        return response;
+      }
+
+      const retryAfterMs = getRetryAfterMs(response);
+      const backoffMs = retryAfterMs ?? Math.min(2000 * (2 ** attempt), 8000);
+      await wait(backoffMs);
+      attempt += 1;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (signal?.aborted) throw error;
+
+      const isTimeout = timeoutController.signal.aborted;
+      const isNetworkLikeError = error?.name === 'TypeError' || isTimeout;
+      if (!isNetworkLikeError || attempt >= maxRetries) {
+        throw error;
+      }
+
+      const backoffMs = Math.min(1500 * (2 ** attempt), 6000);
+      await wait(backoffMs);
+      attempt += 1;
+    }
+  }
+}
 
 // ─── Calendar ────────────────────────────────────────────────────
 function renderCalendar() {
@@ -927,12 +1183,21 @@ const systemPrompts = {
 };
 
 async function generateContent() {
+  if (isGenerating && generationController) {
+    generationController.abort();
+    return;
+  }
+
   const prompt = document.getElementById('promptInput').value.trim();
   if (!prompt) { document.getElementById('promptInput').focus(); return; }
 
   const btn = document.getElementById('genBtn');
+  isGenerating = true;
+  generationController = new AbortController();
   btn.disabled = true;
-  btn.textContent = '✦ Generating…';
+  btn.disabled = false;
+  btn.textContent = '✦ Cancel';
+  btn.setAttribute('aria-label', 'Cancel content generation');
 
   const outputArea = document.getElementById('outputArea');
   outputArea.innerHTML = `<div class="loading"><div class="dots"><span>·</span><span>·</span><span>·</span></div> Writing your content</div>`;
@@ -948,49 +1213,102 @@ async function generateContent() {
     const systemMsg = sys(selectedLang);
 
     try {
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          system: systemMsg,
-          messages: [{ role: 'user', content: `Topic / prompt: ${prompt}` }]
-        })
-      });
+      const resp = await fetchWithTimeoutAndRetry(
+        'https://api.anthropic.com/v1/messages',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 1000,
+            system: systemMsg,
+            messages: [{ role: 'user', content: `Topic / prompt: ${prompt}` }]
+          })
+        },
+        { signal: generationController.signal, timeoutMs: 25000, maxRetries: 2 }
+      );
 
-      const data = await resp.json();
-      const text = data.content?.map(b => b.text || '').join('') || 'No response.';
-      results.push({ platform: plat, account: accountMap[selectedAccount], text });
-    } catch(e) {
-      results.push({ platform: plat, account: accountMap[selectedAccount], text: 'Error generating content. Please try again.' });
+      let data = null;
+      try {
+        data = await resp.json();
+      } catch (jsonError) {
+        data = null;
+      }
+
+      if (!resp.ok) {
+        results.push({
+          platform: plat,
+          account: accountMap[selectedAccount],
+          text: '',
+          isError: true,
+          errorMessage: parseAnthropicError(resp.status, data)
+        });
+        continue;
+      }
+
+      const text = data?.content?.map((b) => b.text || '').join('') || '';
+      if (!text.trim()) {
+        results.push({
+          platform: plat,
+          account: accountMap[selectedAccount],
+          text: '',
+          isError: true,
+          errorMessage: 'No content returned from the model. Please retry.'
+        });
+        continue;
+      }
+
+      results.push({ platform: plat, account: accountMap[selectedAccount], text, isError: false });
+    } catch (e) {
+      if (generationController.signal.aborted) {
+        outputArea.innerHTML = `<div class="empty-state"><span class="big">✦</span>Generation cancelled.</div>`;
+        break;
+      }
+      results.push({
+        platform: plat,
+        account: accountMap[selectedAccount],
+        text: '',
+        isError: true,
+        errorMessage: 'Network or timeout error. Check your connection and try again.'
+      });
     }
+
+    // Small pacing gap to reduce burst rate-limit hits on multi-platform runs.
+    await wait(300);
   }
 
-  btn.disabled = false;
+  isGenerating = false;
+  generationController = null;
   btn.textContent = '✦ Generate Content';
+  btn.setAttribute('aria-label', 'Generate content');
+  btn.disabled = false;
 
   if (results.length === 0) {
-    outputArea.innerHTML = `<div class="empty-state">No platforms selected.</div>`;
+    if (!outputArea.innerHTML.includes('Generation cancelled')) {
+      outputArea.innerHTML = `<div class="empty-state">No platforms selected.</div>`;
+    }
     return;
   }
 
   outputArea.innerHTML = results.map((r, i) => {
-    const parts = r.text.split('---IMAGE PROMPT---');
+    const parts = (r.text || '').split('---IMAGE PROMPT---');
     const caption = parts[0].trim();
     const imgPrompt = parts[1]?.trim();
+    const cardClass = r.isError ? 'output-block error' : 'output-block';
+    const contentText = r.isError ? 'Content generation failed for this platform.' : caption;
 
     return `
-      <div class="output-block">
+      <div class="${cardClass}">
         <div class="output-block-header">
           <div class="output-platform-tag ${r.account}">${r.account === 'ai' ? '🤖' : r.account === 'personal' ? '📸' : '🏛️'} ${r.platform}</div>
           <div class="output-actions">
-            <button class="icon-btn" onclick="copyContent(${i})">Copy</button>
-            <button class="icon-btn save-btn" onclick="openModal(${i})">Schedule</button>
+            <button class="icon-btn" ${r.isError ? 'disabled aria-disabled="true" title="Unavailable for errors"' : ''} onclick="${r.isError ? '' : `copyContent(${i})`}">Copy</button>
+            <button class="icon-btn save-btn" ${r.isError ? 'disabled aria-disabled="true" title="Unavailable for errors"' : ''} onclick="${r.isError ? '' : `openModal(${i})`}">Schedule</button>
           </div>
         </div>
-        <div class="output-content" id="content-${i}">${caption}</div>
-        ${imgPrompt ? `<div class="output-image-prompt"><strong>✦ IMAGE PROMPT:</strong> ${imgPrompt}</div>` : ''}
+        <div class="output-content" id="content-${i}">${contentText}</div>
+        ${!r.isError && imgPrompt ? `<div class="output-image-prompt"><strong>✦ IMAGE PROMPT:</strong> ${imgPrompt}</div>` : ''}
+        ${r.isError ? `<div class="output-error-note">⚠ ${r.errorMessage}</div>` : ''}
       </div>
     `;
   }).join('');
@@ -1044,7 +1362,7 @@ function confirmSchedule() {
 
   if (!scheduledPosts[date]) scheduledPosts[date] = [];
   scheduledPosts[date].push({ account, platform, content: pendingContent, created: new Date().toISOString() });
-  localStorage.setItem('meri_posts', JSON.stringify(scheduledPosts));
+  persistPosts();
 
   closeModal();
   renderCalendar();
@@ -1071,6 +1389,8 @@ renderCalendar();
 
 // Set today's date in modal by default
 document.getElementById('schedDate').value = dateKey(new Date());
+document.getElementById('userIdInput').value = cloudUserId;
+syncFromCloud();
 
 document.getElementById('modalOverlay').addEventListener('click', (event) => {
   if (event.target.id === 'modalOverlay') {
